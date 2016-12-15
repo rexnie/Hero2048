@@ -10,6 +10,7 @@ import android.widget.TextView;
 
 import com.imooc.game2048.config.Config;
 
+/* 表示小方框对象*/
 public class GameItem extends FrameLayout {
 
     // Item显示数字
