@@ -43,6 +43,7 @@ public class GameView extends GridLayout implements OnTouchListener {
     // 历史记录分数
     private int mScoreHistory;
     // 最高记录
+    // TODO： 每个游戏难度都有最高记录
     private int mHighScore;
     // 目标分数
     private int mTarget;
@@ -109,9 +110,12 @@ public class GameView extends GridLayout implements OnTouchListener {
         getBlanks();
         if (mBlanks.size() > 0) {
             int randomNum = (int) (Math.random() * mBlanks.size());
+
+            // 随机的取一个空的位置
             Point randomPoint = mBlanks.get(randomNum);
             mGameMatrix[randomPoint.x][randomPoint.y]
-                    .setNum(Math.random() > 0.2d ? 2 : 4);
+                    .setNum(Math.random() > 0.2d ? 2 : 4); // 随机的生成2,4
+                                                            // 2出现的概率的更大
             animCreate(mGameMatrix[randomPoint.x][randomPoint.y]);
         }
     }
@@ -124,7 +128,7 @@ public class GameView extends GridLayout implements OnTouchListener {
     private void animCreate(GameItem target) {
         ScaleAnimation sa = new ScaleAnimation(0.1f, 1, 0.1f, 1,
                 Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
-        sa.setDuration(100);
+        sa.setDuration(200);
         target.setAnimation(null);
         target.getItemView().startAnimation(sa);
     }
@@ -158,7 +162,7 @@ public class GameView extends GridLayout implements OnTouchListener {
     }
 
     /**
-     * 获取空格Item数组
+     * 获取所有没有数字的Item，存储在mBlanks数组
      */
     private void getBlanks() {
         mBlanks.clear();
@@ -208,6 +212,9 @@ public class GameView extends GridLayout implements OnTouchListener {
                 mStartY = (int) event.getY();
                 break;
             case MotionEvent.ACTION_MOVE:
+                //TODO: 把触发移动的条件放到这里，比放在UP事件里响应更快
+                // 在DOWN时设置flag,当已经移动了的话（judgeDirection中有swipeXXX调用），就把flag清掉
+                // 后面判断flag以免重复移动
                 break;
             case MotionEvent.ACTION_UP:
                 mEndX = (int) event.getX();
@@ -255,7 +262,7 @@ public class GameView extends GridLayout implements OnTouchListener {
     private void judgeDirection(int offsetX, int offsetY) {
         int density = getDeviceDensity();
         int slideDis = 5 * density;
-        int maxDis = 200 * density;
+        int maxDis = 200000 * density;
         boolean flagNormal =
                 (Math.abs(offsetX) > slideDis ||
                         Math.abs(offsetY) > slideDis) &&
@@ -264,16 +271,16 @@ public class GameView extends GridLayout implements OnTouchListener {
         boolean flagSuper = Math.abs(offsetX) > maxDis ||
                 Math.abs(offsetY) > maxDis;
         if (flagNormal && !flagSuper) {
-            if (Math.abs(offsetX) > Math.abs(offsetY)) {
-                if (offsetX > slideDis) {
+            if (Math.abs(offsetX) > Math.abs(offsetY)) { //左右滑动
+                if (offsetX > slideDis) { // 右滑
                     swipeRight();
-                } else {
+                } else { //左滑
                     swipeLeft();
                 }
-            } else {
-                if (offsetY > slideDis) {
+            } else { // 上下滑动
+                if (offsetY > slideDis) { //下滑
                     swipeDown();
-                } else {
+                } else { // 上滑
                     swipeUp();
                 }
             }
@@ -315,18 +322,21 @@ public class GameView extends GridLayout implements OnTouchListener {
      */
     private int checkNums() {
         getBlanks();
-        if (mBlanks.size() == 0) {
+        if (mBlanks.size() == 0) { // 填满了数字
+            //TODO: 优化
+            // i: 0-->N-2, j: 0-->N-2
+            // 最后单独处理最后的一列和最后一行，可避免一些循环内的if跳转
             for (int i = 0; i < mGameLines; i++) {
                 for (int j = 0; j < mGameLines; j++) {
                     if (j < mGameLines - 1) {
                         if (mGameMatrix[i][j].getNum() == mGameMatrix[i][j + 1]
-                                .getNum()) {
+                                .getNum()) { // 水平方向还有相同的数字，还能玩下去
                             return 1;
                         }
                     }
                     if (i < mGameLines - 1) {
                         if (mGameMatrix[i][j].getNum() == mGameMatrix[i + 1][j]
-                                .getNum()) {
+                                .getNum()) { //垂直方向还有相同的数字，还能玩下去
                             return 1;
                         }
                     }
@@ -336,12 +346,12 @@ public class GameView extends GridLayout implements OnTouchListener {
         }
         for (int i = 0; i < mGameLines; i++) {
             for (int j = 0; j < mGameLines; j++) {
-                if (mGameMatrix[i][j].getNum() == mTarget) {
+                if (mGameMatrix[i][j].getNum() == mTarget) { // 有一个数字到了 2048，成功了
                     return 2;
                 }
             }
         }
-        return 1;
+        return 1; // 没有填满，没有到2048，可以继续玩
     }
 
     /**
@@ -412,6 +422,15 @@ public class GameView extends GridLayout implements OnTouchListener {
         }
     }
 
+    //TODO: 核心算法应该独立出来，不应该和业务/视图合并在一起
+    // 算法提供如下API：
+    // 1. 设置游戏维度,目标
+    // 2. 初始化算法内部结构，开始游戏
+    // 3. 输入一个方向，向上/下/左/右移动，返回结果矩阵，以及新插入的随机数位置
+    // 4. 是否游戏结束
+    // 5. 是否有移动过isMoved
+    // 6. 撤回一步
+
     /**
      * 判断是否移动过(是否需要新增Item)
      *
@@ -439,22 +458,23 @@ public class GameView extends GridLayout implements OnTouchListener {
                     if (mKeyItemNum == -1) {
                         mKeyItemNum = currentNum;
                     } else {
-                        if (mKeyItemNum == currentNum) {
+                        if (mKeyItemNum == currentNum) { //当前值和上次的一样，合并后加入列表
                             mCalList.add(mKeyItemNum * 2);
-                            Config.SCROE += mKeyItemNum * 2;
+                            Config.SCROE += mKeyItemNum * 2; // 增加分数
                             mKeyItemNum = -1;
-                        } else {
+                        } else { // 当前值和上次的不一样，加入列表
                             mCalList.add(mKeyItemNum);
                             mKeyItemNum = currentNum;
                         }
                     }
-                } else {
+                } else { // 忽略空项
                     continue;
                 }
             }
             if (mKeyItemNum != -1) {
                 mCalList.add(mKeyItemNum);
             }
+            // 填入处理过的值
             // 改变Item值
             for (int j = 0; j < mCalList.size(); j++) {
                 mGameMatrix[j][i].setNum(mCalList.get(j));
